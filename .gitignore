@@ -2,3 +2,7 @@
 /dataset
 /out
 MiniMind2
+model/__pycache__
+out
+website/
+docs-minimind/
