@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-
+from pathlib import Path
 __package__ = "scripts"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import torch
@@ -63,16 +63,21 @@ def convert_torch2transformers_llama(torch_path, transformers_path, dtype=torch.
 
 
 def convert_transformers2torch(transformers_path, torch_path):
-    model = AutoModelForCausalLM.from_pretrained(transformers_path, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(transformers_path, trust_remote_code=True, torch_dtype=torch.bfloat16)
     torch.save(model.state_dict(), torch_path)
     print(f"模型已保存为 PyTorch 格式: {torch_path}")
 
 
 
 if __name__ == '__main__':
-    lm_config = MiniMindConfig(hidden_size=512, num_hidden_layers=8, max_seq_len=8192, use_moe=False)
-    torch_path = f"../out/full_sft_{lm_config.hidden_size}{'_moe' if lm_config.use_moe else ''}.pth"
-    transformers_path = '../MiniMind2-Small'
-    convert_torch2transformers_llama(torch_path, transformers_path)
+    base_hf = Path('./hf_model/llama-3-8B-Instruct')
+    base_torch = Path('./torch_model/llama-3-8B-Instruct')
+    config_path = base_hf / 'config.json'
+    with config_path.open('r') as f:
+            config_data = json.load(f)
+    lm_config = MiniMindConfig(**config_data)
+
+    torch_path = base_torch / f"full_sft_{lm_config.hidden_size}{'_moe' if lm_config.use_moe else ''}.pth"
+    # convert_torch2transformers_llama(torch_path, transformers_path)
     # # convert transformers to torch model
-    # convert_transformers2torch(transformers_path, torch_path)
+    convert_transformers2torch(base_hf, torch_path)

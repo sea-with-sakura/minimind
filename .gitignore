@@ -1,4 +1,7 @@
-model/__pycache__
+__pycache__/
 out
 website/
 docs-minimind/
+hf_model/
+torch_model/
+.vscode/

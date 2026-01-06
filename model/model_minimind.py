@@ -2,80 +2,78 @@
 #                                             MiniMind Config
 # 📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘
 
+from dataclasses import dataclass, field
 from transformers import PretrainedConfig
 
 
+@dataclass
 class MiniMindConfig(PretrainedConfig):
-    model_type = "minimind"
+    # === core architecture & vocab ===
+    architectures: list = field(default_factory=lambda: ["MiniMindForCausalLM"])
+    model_type: str = "minimind"
+    vocab_size: int = 6400
+    hidden_size: int = 512
+    num_hidden_layers: int = 8
+    num_attention_heads: int = 8
+    num_key_value_heads: int = 2
+    head_dim: int | None = None
 
-    def __init__(
-            self,
-            dropout: float = 0.0,
-            bos_token_id: int = 1,
-            eos_token_id: int = 2,
-            hidden_act: str = 'silu',
-            hidden_size: int = 512,
-            intermediate_size: int = None,
-            max_position_embeddings: int = 32768,
-            num_attention_heads: int = 8,
-            num_hidden_layers: int = 8,
-            num_key_value_heads: int = 2,
-            vocab_size: int = 6400,
-            rms_norm_eps: float = 1e-05,
-            rope_theta: int = 1000000.0,
-            inference_rope_scaling: bool = False,
-            flash_attn: bool = True,
-            ####################################################
-            # Here are the specific configurations of MOE
-            # When use_moe is false, the following is invalid
-            ####################################################
-            use_moe: bool = False,
-            num_experts_per_tok: int = 2,
-            n_routed_experts: int = 4,
-            n_shared_experts: int = 1,
-            scoring_func: str = 'softmax',
-            aux_loss_alpha: float = 0.01,
-            seq_aux: bool = True,
-            norm_topk_prob: bool = True,
-            **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.dropout = dropout
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.num_key_value_heads = num_key_value_heads
-        self.vocab_size = vocab_size
-        self.rms_norm_eps = rms_norm_eps
-        self.rope_theta = rope_theta
-        self.inference_rope_scaling = inference_rope_scaling
-        # 外推长度 = factor * original_max_position_embeddings = 32768
-        self.rope_scaling = {
-            "beta_fast": 32,
-            "beta_slow": 1,
-            "factor": 16,
-            "original_max_position_embeddings": 2048,
-            "attention_factor": 1.0,
-            "type": "yarn"
-        } if self.inference_rope_scaling else None
-        self.flash_attn = flash_attn
-        ####################################################
-        # Here are the specific configurations of MOE
-        # When use_moe is false, the following is invalid
-        ####################################################
-        self.use_moe = use_moe
-        self.num_experts_per_tok = num_experts_per_tok  # 每个token选择的专家数量
-        self.n_routed_experts = n_routed_experts  # 总的专家数量
-        self.n_shared_experts = n_shared_experts  # 共享专家
-        self.scoring_func = scoring_func  # 评分函数，默认为'softmax'
-        self.aux_loss_alpha = aux_loss_alpha  # 辅助损失的alpha参数
-        self.seq_aux = seq_aux  # 是否在序列级别上计算辅助损失
-        self.norm_topk_prob = norm_topk_prob  # 是否标准化top-k概率
+    # === activation & dims ===
+    intermediate_size: int | None = None
+    hidden_act: str = "silu"
+    rms_norm_eps: float = 1e-5
+
+    # === dropout & bias ===
+    dropout: float = 0.0
+    attention_dropout: float = 0.0
+    attention_bias: bool = False
+    mlp_bias: bool = False
+
+    # === positions & rotary ===
+    max_position_embeddings: int = 32768
+    rope_theta: float = 1e6
+    inference_rope_scaling: bool = False
+    rope_scaling: dict | None = field(default=None, init=True)
+
+    # === tokens & cache ===
+    bos_token_id: int = 1
+    eos_token_id: int = 2
+    tie_word_embeddings: bool = True
+    use_cache: bool = True
+
+    # === attention impl ===
+    flash_attn: bool = True
+
+    # === MoE ===
+    use_moe: bool = False
+    num_experts_per_tok: int = 2
+    n_routed_experts: int = 4
+    n_shared_experts: int = 1
+    scoring_func: str = "softmax"
+    aux_loss_alpha: float = 0.01
+    seq_aux: bool = True
+    norm_topk_prob: bool = True
+
+    # === legacy/compat (not yet applied in code) ===
+    transformers_version: str | None = None  # kept for HF config compatibility
+    dtype: str | None = None  # HF metadata only; torch dtype is chosen at load
+    initializer_range: float = 0.02  # not used in current init path
+    pretraining_tp: int = 1  # HF compatibility, no effect in current model
+
+    def __post_init__(self):
+        super().__init__()
+        if self.rope_scaling is None and self.inference_rope_scaling:
+            self.rope_scaling = {
+                "beta_fast": 32,
+                "beta_slow": 1,
+                "factor": 16,
+                "original_max_position_embeddings": 2048,
+                "attention_factor": 1.0,
+                "type": "yarn",
+            }
+        # When rope_scaling is provided from config.json, ensure inference flag follows it
+        if self.rope_scaling is not None:
+            self.inference_rope_scaling = True
 
 
 # 📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘
@@ -89,7 +87,7 @@ import torch.nn.functional as F
 from torch import nn
 from transformers.activations import ACT2FN
 from typing import Optional, Tuple, List, Union
-from transformers import PreTrainedModel, GenerationMixin, PretrainedConfig
+from transformers import PreTrainedModel, PretrainedConfig, GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
 
@@ -156,11 +154,12 @@ class Attention(nn.Module):
         self.n_local_kv_heads = self.num_key_value_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
         self.head_dim = args.hidden_size // args.num_attention_heads
-        self.q_proj = nn.Linear(args.hidden_size, args.num_attention_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(args.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(args.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(args.num_attention_heads * self.head_dim, args.hidden_size, bias=False)
-        self.attn_dropout = nn.Dropout(args.dropout)
+        use_bias = args.attention_bias
+        self.q_proj = nn.Linear(args.hidden_size, args.num_attention_heads * self.head_dim, bias=use_bias)
+        self.k_proj = nn.Linear(args.hidden_size, self.num_key_value_heads * self.head_dim, bias=use_bias)
+        self.v_proj = nn.Linear(args.hidden_size, self.num_key_value_heads * self.head_dim, bias=use_bias)
+        self.o_proj = nn.Linear(args.num_attention_heads * self.head_dim, args.hidden_size, bias=use_bias)
+        self.attn_dropout = nn.Dropout(args.attention_dropout)
         self.resid_dropout = nn.Dropout(args.dropout)
         self.dropout = args.dropout
         self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention') and args.flash_attn
@@ -222,9 +221,9 @@ class FeedForward(nn.Module):
         if config.intermediate_size is None:
             intermediate_size = int(config.hidden_size * 8 / 3)
             config.intermediate_size = 64 * ((intermediate_size + 64 - 1) // 64)
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
         self.dropout = nn.Dropout(config.dropout)
         self.act_fn = ACT2FN[config.hidden_act]
 
@@ -316,8 +315,10 @@ class MOEFeedForward(nn.Module):
             y = torch.empty_like(x, dtype=x.dtype)
             for i, expert in enumerate(self.experts):
                 expert_out = expert(x[flat_topk_idx == i])
-                if expert_out.shape[0] > 0: y[flat_topk_idx == i] = expert_out.to(y.dtype)
-                else: y[flat_topk_idx == i] = expert_out.to(y.dtype) + 0 * sum(p.sum() for p in expert.parameters())
+                if expert_out.shape[0] > 0: 
+                    y[flat_topk_idx == i] = expert_out.to(y.dtype)
+                else: 
+                    y[flat_topk_idx == i] = expert_out.to(y.dtype) + 0 * sum(p.sum() for p in expert.parameters())
             y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
             y = y.view(*orig_shape)
         else:
@@ -383,7 +384,7 @@ class MiniMindModel(nn.Module):
         self.vocab_size, self.num_hidden_layers = config.vocab_size, config.num_hidden_layers
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.dropout = nn.Dropout(config.dropout)
-        self.layers = nn.ModuleList([MiniMindBlock(l, config) for l in range(self.num_hidden_layers)])
+        self.layers = nn.ModuleList([MiniMindBlock(layer, config) for layer in range(self.num_hidden_layers)])
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         freqs_cos, freqs_sin = precompute_freqs_cis(dim=config.hidden_size // config.num_attention_heads,
@@ -399,7 +400,8 @@ class MiniMindModel(nn.Module):
                 use_cache: bool = False,
                 **kwargs):
         batch_size, seq_length = input_ids.shape
-        if hasattr(past_key_values, 'layers'): past_key_values = None
+        if hasattr(past_key_values, 'layers'): 
+            past_key_values = None
         past_key_values = past_key_values or [None] * len(self.layers)
         start_pos = past_key_values[0][0].shape[1] if past_key_values[0] is not None else 0
 
@@ -423,7 +425,7 @@ class MiniMindModel(nn.Module):
 
         hidden_states = self.norm(hidden_states)
 
-        aux_loss = sum([l.mlp.aux_loss for l in self.layers if isinstance(l.mlp, MOEFeedForward)], hidden_states.new_zeros(1).squeeze())
+        aux_loss = sum([layer.mlp.aux_loss for layer in self.layers if isinstance(layer.mlp, MOEFeedForward)], hidden_states.new_zeros(1).squeeze())
         return hidden_states, presents, aux_loss
 
 
@@ -456,3 +458,99 @@ class MiniMindForCausalLM(PreTrainedModel, GenerationMixin):
         output = CausalLMOutputWithPast(logits=logits, past_key_values=past_key_values, hidden_states=hidden_states)
         output.aux_loss = aux_loss
         return output
+
+    @torch.no_grad()
+    def generate_my(
+        self,
+        inputs: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        max_new_tokens: int = 128,
+        temperature: float = 1.0,
+        top_p: float = 1.0,
+        top_k: int = 0,
+        repetition_penalty: float = 1.0,
+        eos_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        do_sample: bool = True,
+        streamer=None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """Lightweight generation loop without relying on transformers.GenerationMixin."""
+
+        def sample_top_p_top_k(logits):
+            if temperature <= 0:
+                raise ValueError("temperature must be > 0")
+            scaled = logits / temperature
+            if do_sample:
+                probs = scaled.softmax(dim=-1)
+                if top_k and top_k > 0:
+                    topk_probs, topk_idx = torch.topk(probs, k=min(top_k, probs.size(-1)), dim=-1)
+                    topk_probs = topk_probs / topk_probs.sum(dim=-1, keepdim=True)
+                    probs = torch.zeros_like(probs).scatter_(-1, topk_idx, topk_probs)
+                if top_p < 1.0:
+                    sorted_probs, sorted_idx = probs.sort(dim=-1, descending=True)
+                    cumsum = sorted_probs.cumsum(dim=-1)
+                    mask = cumsum > top_p
+                    # keep first token over threshold
+                    mask[..., 0] = False
+                    sorted_probs = sorted_probs.masked_fill(mask, 0.0)
+                    sorted_probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)
+                    idx = torch.multinomial(sorted_probs, num_samples=1)
+                    next_token = sorted_idx.gather(-1, idx)
+                else:
+                    next_token = torch.multinomial(probs, num_samples=1)
+            else:
+                next_token = scaled.argmax(dim=-1, keepdim=True)
+            return next_token
+
+        device = inputs.device
+        eos_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        pad_id = pad_token_id if pad_token_id is not None else getattr(self.config, "pad_token_id", eos_id)
+
+        input_ids = inputs
+        past = None
+        generated = input_ids
+        attn_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids, device=device)
+        finished = torch.zeros(input_ids.size(0), dtype=torch.bool, device=device)
+
+        for _ in range(max_new_tokens):
+            current_ids = generated if past is None else generated[:, -1:]
+            output = self.forward(
+                input_ids=current_ids,
+                attention_mask=attn_mask,
+                past_key_values=past,
+                use_cache=True,
+            )
+
+            logits = output.logits[:, -1, :]
+            if repetition_penalty != 1.0:
+                # simple repetition penalty on all previously generated tokens (skip pad)
+                for token_id in generated.unique():
+                    if pad_id is not None and token_id.item() == pad_id:
+                        continue
+                    token_mask = generated.eq(token_id)
+                    if token_mask.any():
+                        logits[:, token_id] /= repetition_penalty
+
+            next_token = sample_top_p_top_k(logits)
+
+            # force pad for finished rows
+            if pad_id is not None:
+                next_token = torch.where(finished.unsqueeze(-1), torch.full_like(next_token, pad_id), next_token)
+
+            generated = torch.cat([generated, next_token], dim=-1)
+            step_mask = torch.where(finished.unsqueeze(-1), torch.zeros_like(next_token, device=device), torch.ones_like(next_token, device=device))
+            attn_mask = torch.cat([attn_mask, step_mask], dim=-1)
+            past = output.past_key_values
+
+            if streamer is not None:
+                streamer.put(next_token[0])
+
+            if eos_id is not None:
+                finished = finished | (next_token.squeeze(-1) == eos_id)
+            if finished.all():
+                break
+
+        if streamer is not None and hasattr(streamer, "end"):
+            streamer.end()
+        return generated
